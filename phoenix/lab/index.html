@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Phoenix Lab</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Phoenix Lab</h1>
+        <p>Make the open X recommendation release visible: run Phoenix, then compare it with a current-post judge.</p>
+      </div>
+      <div class="status" id="status">Checking artifacts</div>
+    </header>
+
+    <nav class="tabs" aria-label="Lab views">
+      <button class="tab active" data-view="pipelineView" type="button">Phoenix Pipeline</button>
+      <button class="tab" data-view="judgeView" type="button">Handle Judge</button>
+    </nav>
+
+    <section class="explain-strip">
+      <div>
+        <span>Plain English</span>
+        <strong>We turned a terminal model demo into a browser tool.</strong>
+        <p>Phoenix takes a small history of things a user engaged with and ranks candidate posts from the local sports corpus.</p>
+      </div>
+      <div>
+        <span>Technical</span>
+        <strong>The server wraps `run_pipeline.py` and parses its output.</strong>
+        <p>The lab keeps the released artifacts unchanged, writes run logs locally, and exposes JSON endpoints for repeatable tests.</p>
+      </div>
+    </section>
+
+    <main id="pipelineView" class="workspace view active-view">
+      <section class="editor-pane" aria-label="Sequence editor">
+        <div class="pane-header">
+          <div>
+            <h2>User Sequence</h2>
+            <p>Engagement history JSON passed into `run_pipeline.py`.</p>
+          </div>
+          <button id="loadExample" type="button">Reset</button>
+        </div>
+        <textarea id="sequenceInput" spellcheck="false"></textarea>
+        <div class="controls">
+          <label>
+            Retrieval
+            <input id="retrievalDepth" type="number" min="1" max="1000" value="200">
+          </label>
+          <label>
+            Display
+            <input id="displayCount" type="number" min="1" max="100" value="30">
+          </label>
+          <button id="runButton" type="button">Run Pipeline</button>
+        </div>
+        <div class="message" id="message"></div>
+      </section>
+
+      <section class="results-pane" aria-label="Ranked results">
+        <div class="pane-header">
+          <div>
+            <h2>Ranked Feed</h2>
+            <p id="runMeta">No run yet.</p>
+          </div>
+          <button id="toggleLog" type="button">Log</button>
+        </div>
+
+        <div class="metrics" id="metrics">
+          <div><span>Corpus</span><strong>-</strong></div>
+          <div><span>Retrieved</span><strong>-</strong></div>
+          <div><span>Best Score</span><strong>-</strong></div>
+          <div><span>Runtime</span><strong>-</strong></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Score</th>
+                <th>Ret</th>
+                <th>Fav</th>
+                <th>Reply</th>
+                <th>RT</th>
+                <th>Dwell</th>
+                <th>VQV</th>
+                <th>Topics</th>
+                <th>Post</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <tr><td colspan="10" class="empty">Run the pipeline to populate results.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <pre id="rawLog" class="raw-log" hidden></pre>
+      </section>
+    </main>
+
+    <main id="judgeView" class="workspace view">
+      <section class="editor-pane" aria-label="Handle judge inputs">
+        <div class="pane-header">
+          <div>
+            <h2>Handle Or Posts</h2>
+            <p>Start with the sample, paste X API-style post JSON, or fetch a live handle with `X_BEARER_TOKEN`.</p>
+          </div>
+          <button id="runSampleJudge" type="button">Run Sample</button>
+        </div>
+        <div class="guide">
+          <strong>Fast path</strong>
+          <ol>
+            <li>Click <b>Run Sample</b>.</li>
+            <li>Read the Plain English summary.</li>
+            <li>Open the signal columns to see why each post scored that way.</li>
+          </ol>
+        </div>
+        <div class="token-note" id="tokenNote">Checking live X token.</div>
+        <label class="toggle-row">
+          <input id="phoenixSimToggle" type="checkbox">
+          Phoenix Simulation Mode
+        </label>
+        <label>
+          Handle
+          <input id="handleInput" type="text" value="sample" placeholder="@xdevelopers">
+        </label>
+        <textarea id="postsInput" class="posts-input" spellcheck="false"></textarea>
+        <div class="controls judge-controls">
+          <label>
+            Live max
+            <input id="maxPosts" type="number" min="5" max="100" value="10">
+          </label>
+          <button id="loadSamplePosts" type="button">Load Sample</button>
+          <button id="judgePastedButton" type="button">Judge Pasted</button>
+          <button id="judgeLiveButton" type="button">Fetch Live</button>
+        </div>
+        <div class="message" id="judgeMessage"></div>
+      </section>
+
+      <section class="results-pane" aria-label="Handle judge results">
+        <div class="pane-header">
+          <div>
+            <h2>Post Scorecard</h2>
+            <p id="judgeMeta">No judge run yet.</p>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div>
+            <span>Plain English</span>
+            <p id="judgeSummary">Load the sample or fetch a live handle to see what is working.</p>
+            <ul id="judgeTips" class="tips-list"></ul>
+          </div>
+          <div>
+            <span>Technical</span>
+            <p id="judgeTechnical">Scores blend observable engagement, recency, conversation depth, clarity, and media/link presence.</p>
+            <p id="patternSummary" class="pattern-summary"></p>
+          </div>
+        </div>
+
+        <div class="metrics" id="judgeMetrics">
+          <div><span>Posts</span><strong>-</strong></div>
+          <div><span>Average</span><strong>-</strong></div>
+          <div><span>Best</span><strong>-</strong></div>
+          <div><span>Source</span><strong>-</strong></div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="judge-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Score</th>
+                <th>Likes</th>
+                <th>Replies</th>
+                <th>Reposts</th>
+                <th>Talk Ratio</th>
+                <th>Slop</th>
+                <th>Dwell</th>
+                <th>Phoenix Delta</th>
+                <th>Reasons</th>
+                <th>Post</th>
+              </tr>
+            </thead>
+            <tbody id="judgeBody">
+              <tr><td colspan="10" class="empty">Click Run Sample to see the judge work end to end.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <section class="experiments">
+          <h2>Experiment Ideas</h2>
+          <p>Draft variations generated from the weakest/sloppiest post so creators can test a better framing.</p>
+          <div id="experimentList" class="experiment-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

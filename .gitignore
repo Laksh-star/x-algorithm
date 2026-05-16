@@ -1,1 +1,6 @@
 __pycache__/
+.DS_Store
+phoenix/.pytest_cache/
+phoenix/.venv/
+phoenix/lab_runs/
+phoenix/artifacts/oss-phoenix-artifacts/

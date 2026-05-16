@@ -271,3 +271,16 @@ This will:
 ```shell
 uv run pytest test_recsys_model.py test_recsys_retrieval_model.py
 ```
+
+### Local Phoenix Lab
+
+This fork includes a small local browser UI under [`lab/`](lab/) for editing the
+example user sequence, running `run_pipeline.py`, viewing parsed ranked results,
+and judging pasted or live recent posts with explainable signals.
+
+```shell
+uv run python lab_server.py 8765
+```
+
+Then open `http://127.0.0.1:8765/`. See [`lab/README.md`](lab/README.md) for
+setup, smoke tests, and generated-file notes.
