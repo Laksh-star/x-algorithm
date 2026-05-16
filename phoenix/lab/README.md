@@ -123,6 +123,73 @@ The scorecard shows both views:
 - **Technical**: talk ratio, repost velocity, dwell potential, reply-depth proxy, slop detection, repetition penalty, and optional Phoenix simulation.
 - **Signal columns**: `Talk Ratio`, `Slop`, `Dwell`, and `Phoenix Delta`.
 
+## Manual Test Checklist
+
+Use this checklist after starting the server.
+
+### 1. Basic UI Load
+
+1. Open `http://127.0.0.1:8765/`.
+2. Confirm the top-right status says `Artifacts ready`.
+3. Confirm both tabs are visible: `Phoenix Pipeline` and `Handle Judge`.
+
+### 2. Phoenix Pipeline
+
+1. Stay on `Phoenix Pipeline`.
+2. Click `Run Pipeline`.
+3. Expected result:
+   - `Ranked Feed` table fills with rows.
+   - Metrics show `Corpus`, `Retrieved`, `Best Score`, and `Runtime`.
+   - `Log` reveals the raw `run_pipeline.py` output.
+
+### 3. Handle Judge Sample
+
+1. Open `Handle Judge`.
+2. Click `Run Sample`.
+3. Expected result:
+   - Message says `Scored 5 posts.`
+   - `Plain English` summary explains the strongest post.
+   - Tips appear under the summary.
+   - Table includes `Talk Ratio`, `Slop`, `Dwell`, and `Phoenix Delta`.
+   - `Phoenix Delta` is `-` because simulation is off.
+   - `Experiment Ideas` appears below the table.
+
+### 4. Phoenix Simulation Mode
+
+1. In `Handle Judge`, check `Phoenix Simulation Mode`.
+2. Click `Run Sample` again.
+3. Expected result:
+   - Metadata says `Phoenix simulation: simulated`.
+   - `Phoenix Delta` values populate.
+   - This mode can take a few seconds because it loads the actual ranker artifact.
+
+### 5. Pasted Post Experiment
+
+1. Click `Load Sample`.
+2. Edit one post in the JSON, for example add a question to the text.
+3. Click `Judge Pasted`.
+4. Expected result:
+   - Scores and tips update.
+   - Changes in `Talk Ratio`, `Slop`, and `Dwell` make the experiment auditable.
+
+### 6. Live Handle Mode
+
+Start the server with a token:
+
+```shell
+cd "/Users/ln-mini/Downloads/x algorithm/x-algorithm/phoenix"
+X_BEARER_TOKEN="..." uv run python lab_server.py 8765
+```
+
+Then:
+
+1. Open `Handle Judge`.
+2. Enter a handle, for example `@xdevelopers`.
+3. Click `Fetch Live`.
+4. Expected result:
+   - The token note says live mode is ready.
+   - The table fills with recent posts fetched from X API v2.
+
 Example sample output:
 
 ```text
@@ -174,6 +241,12 @@ Run the handle judge API directly with sample posts:
 
 ```shell
 uv run python -c 'import json, urllib.request; sample=json.load(urllib.request.urlopen("http://127.0.0.1:8765/api/handle-sample")); data=json.dumps({"handle":sample["handle"],"posts":sample["posts"]}).encode(); req=urllib.request.Request("http://127.0.0.1:8765/api/judge", data=data, headers={"content-type":"application/json"}); print(urllib.request.urlopen(req, timeout=60).read().decode()[:1000])'
+```
+
+Run the handle judge API with Phoenix Simulation Mode:
+
+```shell
+uv run python -c 'import json, urllib.request; sample=json.load(urllib.request.urlopen("http://127.0.0.1:8765/api/handle-sample")); data=json.dumps({"handle":sample["handle"],"posts":sample["posts"],"phoenix":True}).encode(); req=urllib.request.Request("http://127.0.0.1:8765/api/judge", data=data, headers={"content-type":"application/json"}); out=json.load(urllib.request.urlopen(req, timeout=120)); print(out["phoenix_status"]); print([(row["score"], row["phoenix_score"], row["phoenix_delta"]) for row in out["rows"]])'
 ```
 
 ## Generated Files
