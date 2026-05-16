@@ -436,14 +436,31 @@ th:nth-child(10) {
   gap: 5px;
 }
 
+.experiment-list article.best-variation {
+  border-color: #8ad7ad;
+  background: #f0fbf5;
+}
+
+.experiment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .experiment-list strong {
   font-size: 18px;
 }
 
 .experiment-list span,
+.experiment-list em,
 .empty-mini {
   color: var(--muted);
   font-size: 12px;
+}
+
+.experiment-list em {
+  font-style: normal;
+  color: var(--good);
 }
 
 .posts-input {

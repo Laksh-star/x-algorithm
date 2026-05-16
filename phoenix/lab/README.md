@@ -86,7 +86,7 @@ Common action IDs used by the example:
 | `11` | dwell |
 | `13` | video quality view |
 
-## Handle Judge 2.0
+## Handle Judge 2.1
 
 The Handle Judge tab is deliberately separate from Phoenix:
 
@@ -120,8 +120,8 @@ Not another algorithm thread: edit posts, run tests, compare signals, and see wh
 The scorecard shows both views:
 
 - **Plain English**: a short read on what is working.
-- **Technical**: talk ratio, repost velocity, dwell potential, reply-depth proxy, slop detection, repetition penalty, and optional Phoenix simulation.
-- **Signal columns**: `Talk Ratio`, `Slop`, `Dwell`, and `Phoenix Delta`.
+- **Technical**: calibrated score, talk ratio, repost velocity, dwell potential, reply-depth proxy, slop detection, repetition penalty, and optional Phoenix simulation.
+- **Signal columns**: `Talk Ratio`, `Slop`, `Dwell`, and signed Phoenix simulation impact.
 
 ## Manual Test Checklist
 
@@ -160,7 +160,7 @@ Use this checklist after starting the server.
 2. Click `Run Sample` again.
 3. Expected result:
    - Metadata says `Phoenix simulation: simulated`.
-   - `Phoenix Delta` values populate.
+   - `Phoenix Delta` values populate as signed percent-style impact, such as `+13.4%`.
    - This mode can take a few seconds because it loads the actual ranker artifact.
 
 ### 5. Pasted Post Experiment
@@ -193,7 +193,7 @@ Then:
 Example sample output:
 
 ```text
-@sample has 5 judged posts. The strongest post scores 67.2 because it shows conversation-heavy, deeper replies/quotes.
+@sample has 5 judged posts. The strongest post scores 85.5 because it shows Talk 23.9%, Reply depth 0.92, Engagement 0.86. Compared with a typical news/broadcast account, this batch is solid but needs more reply hooks to become interactive.
 
 Tips:
 - Keep this shape: it has a clear angle and enough conversation signal to test again.
@@ -201,7 +201,10 @@ Tips:
 - Add a short explanation, chart, clip, or thread structure so people have a reason to stay.
 
 Phoenix simulation example:
-Heuristic 67.2 | Phoenix 55.5 | Delta +11.7
+Heuristic 85.5 | Phoenix 75.4 | Simulation impact +13.4%
+
+Best experiment example:
+Media Prompt | Score 57.2 | Improves Dwell +0.45, Slop -0.72, Score +20.3
 ```
 
 ## Smoke Tests

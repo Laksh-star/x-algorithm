@@ -71,13 +71,15 @@ def test_judge_posts_orders_scores_and_explains_result():
     assert scores == sorted(scores, reverse=True)
     assert judged["count"] == len(SAMPLE_POSTS)
     assert judged["summary"].startswith("@sample")
-    assert judged["version"] == "2.0"
+    assert judged["version"] == "2.1"
     assert "Phoenix Simulation" in judged["technical_note"]
     assert judged["tips"]
     assert judged["patterns"]
     assert "talk_ratio" in judged["rows"][0]["signals"]
     assert "slop_score" in judged["rows"][0]["signals"]
     assert "dwell_potential" in judged["rows"][0]["signals"]
+    assert "typical news/broadcast account" in judged["summary"]
+    assert judged["rows"][0]["raw_score"] <= 1
 
 
 def test_judge_posts_rejects_empty_list():
@@ -97,3 +99,13 @@ def test_judge_posts_can_run_without_phoenix_simulation():
 
     assert judged["phoenix_status"] == "off"
     assert all(row["phoenix_score"] is None for row in judged["rows"])
+
+
+def test_experiments_include_labels_and_winner_explanation():
+    judged = judge_posts(SAMPLE_POSTS, handle="sample", phoenix=False)
+
+    assert len(judged["experiments"]) >= 6
+    assert judged["experiments"][0]["best_variation"] is True
+    assert judged["experiments"][0]["variant_label"]
+    assert judged["experiments"][0]["improved_signals"]
+    assert judged["experiments"][0]["why_won"]

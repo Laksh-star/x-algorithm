@@ -135,7 +135,7 @@ function renderJudgeRows(rows) {
           <td>${fmt(row.signals.talk_ratio, 3)}</td>
           <td>${fmt(row.signals.slop_score, 2)}</td>
           <td>${fmt(row.signals.dwell_potential, 2)}</td>
-          <td>${row.phoenix_delta === null ? "-" : fmt(row.phoenix_delta, 1)}</td>
+          <td>${row.phoenix_delta_label || "-"}</td>
           <td class="reason-cell">${row.reasons.join(", ")}</td>
           <td>${row.url ? `<a href="${row.url}" target="_blank" rel="noreferrer">Open</a>` : "-"}</td>
         </tr>
@@ -160,10 +160,15 @@ function renderExperiments(experiments = []) {
   experimentList.innerHTML = experiments
     .map(
       (item) => `
-        <article>
-          <strong>${fmt(item.score, 1)}</strong>
+        <article class="${item.best_variation ? "best-variation" : ""}">
+          <div class="experiment-head">
+            <strong>${fmt(item.score, 1)}</strong>
+            <span>${item.variant_label || "Variation"}${item.best_variation ? " | Best" : ""}</span>
+          </div>
           <p>${item.text}</p>
           <span>Talk ${fmt(item.signals.talk_ratio, 3)} | Slop ${fmt(item.signals.slop_score, 2)} | Dwell ${fmt(item.signals.dwell_potential, 2)}</span>
+          <span>${(item.improved_signals || []).join(" | ")}</span>
+          <em>${item.why_won || ""}</em>
         </article>
       `,
     )

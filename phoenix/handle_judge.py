@@ -1,4 +1,4 @@
-"""Handle Judge 2.0 for recent X posts.
+"""Handle Judge 2.1 for recent X posts.
 
 This module is deliberately not a narrative "algorithm thread" clone. It is a
 runnable simulator and transparent judge:
@@ -61,6 +61,15 @@ GENERIC_NEWS_WORDS = (
 )
 THREAD_MARKERS = ("thread", "1/", "part 1", "why", "how", "three ", "3 ", "explained")
 POLL_MARKERS = ("poll", "vote", "choose", "which one", "what would you")
+SIGNAL_LABELS = {
+    "talk_signal": "Talk",
+    "repost_velocity": "Repost velocity",
+    "dwell_potential": "Dwell",
+    "reply_depth": "Reply depth",
+    "engagement": "Engagement",
+    "slop_score": "Slop",
+    "repetition_penalty": "Repetition",
+}
 
 
 SAMPLE_POSTS = [
@@ -210,6 +219,13 @@ def bounded(value: float, upper: float) -> float:
     return max(0.0, min(value / upper, 1.0))
 
 
+def calibrated_score(raw_score: float) -> float:
+    """Map the auditable 0-1 raw score to a creator-friendly 0-100 display range."""
+    raw_score = max(0.0, min(raw_score, 1.0))
+    stretched = 30 + 65 / (1 + math.exp(-8 * (raw_score - 0.45)))
+    return round(max(30.0, min(stretched, 95.0)), 1)
+
+
 def words(text: str) -> list[str]:
     return [word.lower() for word in WORD_RE.findall(text)]
 
@@ -292,6 +308,70 @@ def improvement_tips(row: dict) -> list[str]:
     return tips[:3]
 
 
+def clean_for_variation(text: str) -> str:
+    cleaned = HASHTAG_RE.sub("", text)
+    cleaned = re.sub(
+        r"\b(BREAKING|Latest|Big update|Full details soon|VIRAL)\b[: !-]*",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(r"#\S*", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+([.,:;!?])", r"\1", cleaned)
+    cleaned = re.sub(r"([.,:;!?]){2,}", r"\1", cleaned)
+    cleaned = cleaned.strip(" .:-")
+    if cleaned.lower().startswith("in "):
+        cleaned = f"Match update: {cleaned[3:]}"
+    return cleaned or text.strip()
+
+
+def signal_reasons(signals: dict) -> list[str]:
+    candidates = [
+        ("Talk", signals["talk_signal"], f"Talk {signals['talk_ratio'] * 100:.1f}%"),
+        ("Repost velocity", signals["repost_velocity"], f"Repost velocity {signals['repost_velocity']:.2f}"),
+        ("Dwell", signals["dwell_potential"], f"Dwell {signals['dwell_potential']:.2f}"),
+        ("Reply depth", signals["reply_depth"], f"Reply depth {signals['reply_depth']:.2f}"),
+        ("Engagement", signals["engagement"], f"Engagement {signals['engagement']:.2f}"),
+    ]
+    positives = [label for _, value, label in sorted(candidates, key=lambda item: item[1], reverse=True) if value >= 0.45]
+    penalties = []
+    if signals["slop_score"] >= 0.32:
+        penalties.append(f"Slop risk {signals['slop_score']:.2f}")
+    if signals["repetition_penalty"] >= 0.25:
+        penalties.append(f"Repetition {signals['repetition_penalty']:.2f}")
+    if not positives:
+        positives = [f"Baseline engagement {signals['engagement']:.2f}"]
+    return (positives[:3] + penalties[:1])[:4]
+
+
+def variation_improvements(base: dict, variant: dict) -> list[str]:
+    improvements = []
+    for key, label in [
+        ("talk_signal", "Talk"),
+        ("dwell_potential", "Dwell"),
+        ("reply_depth", "Reply depth"),
+        ("repost_velocity", "Repost velocity"),
+    ]:
+        diff = variant["signals"][key] - base["signals"][key]
+        if diff >= 0.05:
+            improvements.append(f"{label} +{diff:.2f}")
+    slop_diff = base["signals"]["slop_score"] - variant["signals"]["slop_score"]
+    if slop_diff >= 0.05:
+        improvements.append(f"Slop -{slop_diff:.2f}")
+    score_diff = variant["score"] - base["score"]
+    if score_diff >= 2:
+        improvements.append(f"Score +{score_diff:.1f}")
+    return improvements[:4] or ["No major signal lift"]
+
+
+def variation_explanation(base: dict, variant: dict) -> str:
+    improvements = variation_improvements(base, variant)
+    if improvements == ["No major signal lift"]:
+        return "This variation does not materially improve the tested signals."
+    return "Improves " + ", ".join(improvements[:3]) + "."
+
+
 def score_post(
     post: dict,
     now: datetime | None = None,
@@ -324,7 +404,7 @@ def score_post(
     has_link = bool(URL_RE.search(text))
     media = 1.0 if has_media else 0.45 if has_link else 0.25
 
-    score = (
+    raw_score = (
         engagement * 0.18
         + talk_signal * 0.22
         + repost_velocity * 0.13
@@ -335,23 +415,7 @@ def score_post(
         - slop * 0.17
         - repetition_penalty * 0.12
     )
-    score = max(0.0, min(score, 1.0))
-
-    reasons = []
-    if talk_signal >= 0.55:
-        reasons.append("conversation-heavy")
-    elif talk_signal < 0.18:
-        reasons.append("low talk ratio")
-    if repost_velocity >= 0.55:
-        reasons.append("early repost velocity")
-    if dwell >= 0.65:
-        reasons.append("high dwell potential")
-    if reply_depth >= 0.55:
-        reasons.append("deeper replies/quotes")
-    if slop >= 0.4:
-        reasons.append("slop risk")
-    if repetition_penalty >= 0.3:
-        reasons.append("repetitive batch pattern")
+    raw_score = max(0.0, min(raw_score, 1.0))
 
     row = {
         "id": str(post.get("id") or ""),
@@ -378,31 +442,68 @@ def score_post(
             "recency": round(recency, 4),
             "media": round(media, 4),
         },
-        "score": round(score * 100, 1),
+        "raw_score": round(raw_score, 4),
+        "score": calibrated_score(raw_score),
         "phoenix_score": None,
+        "phoenix_raw_score": None,
         "phoenix_delta": None,
-        "reasons": reasons[:5] or ["balanced baseline"],
+        "phoenix_delta_pct": None,
+        "phoenix_delta_label": "-",
+        "reasons": [],
     }
+    row["reasons"] = signal_reasons(row["signals"])
     row["tips"] = improvement_tips(row)
     return row
 
 
 def make_variations(post: dict) -> list[dict]:
     text = str(post.get("text") or "").strip()
-    base = {**post, "id": f"{post.get('id', 'draft')}-base"}
-    question = {**post, "id": f"{post.get('id', 'draft')}-question", "text": f"{text} What changed the outcome for you?"}
+    cleaned = clean_for_variation(text)
+    base = {**post, "id": f"{post.get('id', 'draft')}-base", "variant_label": "Original"}
+    question = {
+        **post,
+        "id": f"{post.get('id', 'draft')}-question",
+        "variant_label": "Question",
+        "text": f"{text} What changed the outcome for you?",
+    }
+    poll = {
+        **post,
+        "id": f"{post.get('id', 'draft')}-poll",
+        "variant_label": "Poll",
+        "text": f"Poll: {cleaned} What should viewers watch next: impact, cause, or reaction?",
+    }
     thread = {
         **post,
         "id": f"{post.get('id', 'draft')}-thread",
+        "variant_label": "Thread Starter",
         "text": f"Thread: {text} Three things to watch next: the matchup, the decision point, and the fan reaction.",
     }
     specific = {
         **post,
         "id": f"{post.get('id', 'draft')}-specific",
-        "text": re.sub(r"\b(BREAKING|Latest|Big update|Full details soon)\b[: ]*", "", text, flags=re.I).strip()
-        or text,
+        "variant_label": "Sharper",
+        "text": f"{cleaned}. The part that matters: what changes for viewers in the next hour?",
     }
-    return [base, question, thread, specific]
+    contrarian = {
+        **post,
+        "id": f"{post.get('id', 'draft')}-contrarian",
+        "variant_label": "Contrarian",
+        "text": f"Unpopular read: {cleaned}. The obvious headline may not be the real story.",
+    }
+    personal = {
+        **post,
+        "id": f"{post.get('id', 'draft')}-personal",
+        "variant_label": "Personal",
+        "text": f"I'd watch this one closely: {cleaned}. What would you ask before sharing it?",
+    }
+    media = {
+        **post,
+        "id": f"{post.get('id', 'draft')}-media",
+        "variant_label": "Media Prompt",
+        "text": f"Visual explainer: {cleaned}. Add a 20-second clip or chart showing the key before/after.",
+        "attachments": post.get("attachments") or {"media_keys": ["synthetic-chart"]},
+    }
+    return [base, question, poll, thread, specific, contrarian, personal, media]
 
 
 def phoenix_simulate_posts(
@@ -503,7 +604,8 @@ def phoenix_simulate_posts(
             + probs[index, IDX_DWELL] * 0.2
         )
         result[str(post.get("id") or "")] = {
-            "phoenix_score": round(float(weighted) * 100, 1),
+            "phoenix_raw_score": round(float(weighted), 4),
+            "phoenix_score": calibrated_score(float(weighted)),
             "phoenix_predicted_engagement": {
                 "favorite": round(float(probs[index, IDX_FAV]), 4),
                 "reply": round(float(probs[index, IDX_REPLY]), 4),
@@ -532,6 +634,9 @@ def attach_phoenix_scores(rows: list[dict], posts: list[dict], handle: str, enab
             continue
         row.update(phoenix)
         row["phoenix_delta"] = round(row["score"] - row["phoenix_score"], 1)
+        row["phoenix_delta_pct"] = round(row["phoenix_delta"] / max(row["phoenix_score"], 1) * 100, 1)
+        sign = "+" if row["phoenix_delta_pct"] >= 0 else ""
+        row["phoenix_delta_label"] = f"{sign}{row['phoenix_delta_pct']:.1f}%"
     return "simulated"
 
 
@@ -549,6 +654,19 @@ def batch_patterns(rows: list[dict]) -> list[str]:
     if not patterns:
         patterns.append("The batch has enough variety to run real A/B experiments.")
     return patterns[:3]
+
+
+def broadcast_benchmark(rows: list[dict]) -> str:
+    avg_talk = sum(row["signals"]["talk_ratio"] for row in rows) / len(rows)
+    avg_slop = sum(row["signals"]["slop_score"] for row in rows) / len(rows)
+    avg_dwell = sum(row["signals"]["dwell_potential"] for row in rows) / len(rows)
+    if avg_talk >= 0.08:
+        return "Compared with a typical news/broadcast account, this batch is unusually conversation-led rather than just headline-led."
+    if avg_slop >= 0.35:
+        return "Compared with a typical news/broadcast account, this batch risks blending into headline-only feed noise."
+    if avg_dwell >= 0.65:
+        return "Compared with a typical news/broadcast account, this batch has stronger dwell potential than plain headline posting."
+    return "Compared with a typical news/broadcast account, this batch is solid but needs more reply hooks to become interactive."
 
 
 def judge_posts(
@@ -581,23 +699,32 @@ def judge_posts(
             break
     summary = (
         f"@{handle.lstrip('@')} has {len(rows)} judged posts. "
-        f"The strongest post scores {top['score']} because it shows {', '.join(top['reasons'])}."
+        f"The strongest post scores {top['score']} because it shows {', '.join(top['reasons'][:3])}. "
+        f"{broadcast_benchmark(rows)}"
     )
     technical = (
-        "Handle Judge 2.0 blends talk ratio, early repost velocity, dwell potential, reply-depth proxy, "
+        "Handle Judge 2.1 blends talk ratio, early repost velocity, dwell potential, reply-depth proxy, "
         "slop detection, and repetition penalties. Phoenix Simulation optionally runs the actual released "
-        "Phoenix ranker on synthetic hashed candidates, so treat Phoenix Delta as a model-comparison signal, not text understanding."
+        "Phoenix ranker on synthetic hashed candidates, so treat Phoenix Delta as a signed simulation impact, not text understanding."
     )
     experiments = []
     if include_experiments:
         base_post = max(posts, key=lambda post: slop_score(str(post.get("text") or "")))
+        experiment_rows = [score_post(post, now=now) for post in make_variations(base_post)]
+        base_row = experiment_rows[0]
+        for row in experiment_rows:
+            row["variant_label"] = next((post.get("variant_label") for post in make_variations(base_post) if post.get("id") == row["id"]), "Variation")
+            row["improved_signals"] = variation_improvements(base_row, row)
+            row["why_won"] = variation_explanation(base_row, row)
         experiments = sorted(
-            (score_post(post, now=now) for post in make_variations(base_post)),
+            experiment_rows,
             key=lambda row: row["score"],
             reverse=True,
         )
+        if experiments:
+            experiments[0]["best_variation"] = True
     return {
-        "version": "2.0",
+        "version": "2.1",
         "handle": handle.lstrip("@"),
         "count": len(rows),
         "average_score": avg_score,
